@@ -622,11 +622,14 @@ namespace Jellyfin.LiveTv
                 var start = startDate.Ticks;
                 var end = endDate.Ticks;
 
-                var pct = now - start;
-
-                pct /= end;
-                pct *= 100;
-                dto.CompletionPercentage = pct;
+                var scheduledTicks = end - start;
+                if (scheduledTicks > 0)
+                {
+                    dto.RunTimeTicks = scheduledTicks;
+                    var elapsed = now - start;
+                    var pct = (double)elapsed / scheduledTicks * 100.0;
+                    dto.CompletionPercentage = Math.Clamp(pct, 0.0, 100.0);
+                }
             }
 
             if (channel is not null)

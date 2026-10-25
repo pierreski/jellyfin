@@ -60,6 +60,70 @@ namespace Jellyfin.MediaEncoding.Hls.Tests.Playlist
             Assert.False(DynamicHlsPlaylistGenerator.IsExtractionAllowedForFile(filePath, allowedExtensions));
         }
 
+        [Fact]
+        public void CreateMainPlaylist_ActiveRecording_GeneratesEventPlaylistWithoutEndlist()
+        {
+            var generator = new DynamicHlsPlaylistGenerator(null!, Array.Empty<Jellyfin.MediaEncoding.Hls.Extractors.IKeyframeExtractor>());
+            var request = new CreateMainPlaylistRequest(
+                null,
+                "test.ts",
+                6000,
+                TimeSpan.FromSeconds(18).Ticks,
+                "ts",
+                "hls1/main/",
+                "?test=1",
+                false,
+                isActiveRecording: true);
+
+            var playlist = generator.CreateMainPlaylist(request);
+
+            Assert.Contains("#EXT-X-PLAYLIST-TYPE:EVENT", playlist, StringComparison.Ordinal);
+            Assert.DoesNotContain("#EXT-X-ENDLIST", playlist, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void CreateMainPlaylist_CompletedEventPlaylist_GeneratesEventPlaylistWithEndlist()
+        {
+            var generator = new DynamicHlsPlaylistGenerator(null!, Array.Empty<Jellyfin.MediaEncoding.Hls.Extractors.IKeyframeExtractor>());
+            var request = new CreateMainPlaylistRequest(
+                null,
+                "test.ts",
+                6000,
+                TimeSpan.FromSeconds(18).Ticks,
+                "ts",
+                "hls1/main/",
+                "?test=1",
+                false,
+                isActiveRecording: false,
+                isEventPlaylist: true);
+
+            var playlist = generator.CreateMainPlaylist(request);
+
+            Assert.Contains("#EXT-X-PLAYLIST-TYPE:EVENT", playlist, StringComparison.Ordinal);
+            Assert.Contains("#EXT-X-ENDLIST", playlist, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void CreateMainPlaylist_StaticMedia_GeneratesVodPlaylistWithEndlist()
+        {
+            var generator = new DynamicHlsPlaylistGenerator(null!, Array.Empty<Jellyfin.MediaEncoding.Hls.Extractors.IKeyframeExtractor>());
+            var request = new CreateMainPlaylistRequest(
+                null,
+                "test.ts",
+                6000,
+                TimeSpan.FromSeconds(18).Ticks,
+                "ts",
+                "hls1/main/",
+                "?test=1",
+                false,
+                isActiveRecording: false);
+
+            var playlist = generator.CreateMainPlaylist(request);
+
+            Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist, StringComparison.Ordinal);
+            Assert.Contains("#EXT-X-ENDLIST", playlist, StringComparison.Ordinal);
+        }
+
         public static TheoryData<int, long, double[]> ComputeEqualLengthSegments_Valid_Success_Data()
         {
             var data = new TheoryData<int, long, double[]>

@@ -18,7 +18,19 @@ public class CreateMainPlaylistRequest
     /// <param name="endpointPrefix">The URI prefix for the relative URL in the playlist.</param>
     /// <param name="queryString">The desired query string to append (must start with ?).</param>
     /// <param name="isRemuxingVideo">Whether the video is being remuxed.</param>
-    public CreateMainPlaylistRequest(Guid? mediaSourceId, string filePath, int desiredSegmentLengthMs, long totalRuntimeTicks, string segmentContainer, string endpointPrefix, string queryString, bool isRemuxingVideo)
+    /// <param name="isActiveRecording">Whether this is an in-progress active recording.</param>
+    /// <param name="isEventPlaylist">Whether this playback uses an event playlist, including after its recording completes.</param>
+    public CreateMainPlaylistRequest(
+        Guid? mediaSourceId,
+        string filePath,
+        int desiredSegmentLengthMs,
+        long totalRuntimeTicks,
+        string segmentContainer,
+        string endpointPrefix,
+        string queryString,
+        bool isRemuxingVideo,
+        bool isActiveRecording = false,
+        bool isEventPlaylist = false)
     {
         MediaSourceId = mediaSourceId;
         FilePath = filePath;
@@ -28,6 +40,8 @@ public class CreateMainPlaylistRequest
         EndpointPrefix = endpointPrefix;
         QueryString = queryString;
         IsRemuxingVideo = isRemuxingVideo;
+        IsActiveRecording = isActiveRecording;
+        IsEventPlaylist = isEventPlaylist || isActiveRecording;
     }
 
     /// <summary>
@@ -69,4 +83,14 @@ public class CreateMainPlaylistRequest
     /// Gets a value indicating whether the video is being remuxed.
     /// </summary>
     public bool IsRemuxingVideo { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is an in-progress active recording.
+    /// </summary>
+    public bool IsActiveRecording { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is an event playlist.
+    /// </summary>
+    public bool IsEventPlaylist { get; }
 }

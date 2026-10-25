@@ -18,6 +18,7 @@ using Jellyfin.MediaEncoding.Hls.Playlist;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
 using MediaBrowser.Model.Configuration;
@@ -51,6 +52,7 @@ public class DynamicHlsController : BaseJellyfinApiController
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
     private readonly IMediaSourceManager _mediaSourceManager;
+    private readonly IRecordingsManager _recordingsManager;
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly IFileSystem _fileSystem;
@@ -67,6 +69,7 @@ public class DynamicHlsController : BaseJellyfinApiController
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="mediaSourceManager">Instance of the <see cref="IMediaSourceManager"/> interface.</param>
+    /// <param name="recordingsManager">Instance of the <see cref="IRecordingsManager"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface.</param>
     /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
@@ -79,6 +82,7 @@ public class DynamicHlsController : BaseJellyfinApiController
         ILibraryManager libraryManager,
         IUserManager userManager,
         IMediaSourceManager mediaSourceManager,
+        IRecordingsManager recordingsManager,
         IServerConfigurationManager serverConfigurationManager,
         IMediaEncoder mediaEncoder,
         IFileSystem fileSystem,
@@ -91,6 +95,7 @@ public class DynamicHlsController : BaseJellyfinApiController
         _libraryManager = libraryManager;
         _userManager = userManager;
         _mediaSourceManager = mediaSourceManager;
+        _recordingsManager = recordingsManager;
         _serverConfigurationManager = serverConfigurationManager;
         _mediaEncoder = mediaEncoder;
         _fileSystem = fileSystem;
@@ -1410,15 +1415,34 @@ public class DynamicHlsController : BaseJellyfinApiController
             segmentLength = (int)Math.Ceiling(segmentLength * (nearestIntFramerate / fps));
         }
 
+        var activeRecording = _recordingsManager.GetActiveRecordingInfo(state.MediaPath);
+        bool isActiveRecording = activeRecording is not null;
+        bool isEventPlaylist = isActiveRecording || state.MediaSource?.IsInProgressRecording == true;
+        long totalRuntimeTicks = state.RunTimeTicks ?? 0;
+
+        if (isActiveRecording)
+        {
+            var timer = activeRecording!.Timer;
+            var startUtc = timer.StartDate.AddSeconds(-timer.PrePaddingSeconds);
+            var elapsedTicks = Math.Max(0, (DateTime.UtcNow - startUtc).Ticks);
+            var scheduledTicks = (timer.EndDate.AddSeconds(timer.PostPaddingSeconds) - startUtc).Ticks;
+
+            var safetyMarginTicks = TimeSpan.FromMilliseconds(segmentLength).Ticks;
+            var liveEdgeTicks = Math.Max(0, elapsedTicks - safetyMarginTicks);
+            totalRuntimeTicks = scheduledTicks > 0 ? Math.Min(liveEdgeTicks, scheduledTicks) : liveEdgeTicks;
+        }
+
         var request = new CreateMainPlaylistRequest(
             mediaSourceId is null ? null : Guid.Parse(mediaSourceId),
             state.MediaPath,
             segmentLength,
-            state.RunTimeTicks ?? 0,
+            totalRuntimeTicks,
             state.Request.SegmentContainer ?? string.Empty,
             "hls1/main/",
             Request.QueryString.ToString(),
-            EncodingHelper.IsCopyCodec(state.OutputVideoCodec));
+            EncodingHelper.IsCopyCodec(state.OutputVideoCodec),
+            isActiveRecording,
+            isEventPlaylist);
         var playlist = _dynamicHlsPlaylistGenerator.CreateMainPlaylist(request);
 
         return new FileContentResult(Encoding.UTF8.GetBytes(playlist), MimeTypes.GetMimeType("playlist.m3u8"));
@@ -1511,11 +1535,14 @@ public class DynamicHlsController : BaseJellyfinApiController
 
                     streamingRequest.StartTimeTicks = streamingRequest.CurrentRuntimeTicks;
 
+                    var activeRecording = _recordingsManager.GetActiveRecordingInfo(state.MediaPath);
+                    var isEventPlaylist = activeRecording is not null || state.MediaSource?.IsInProgressRecording == true;
+
                     state.WaitForPath = segmentPath;
                     job = await _transcodeManager.StartFfMpeg(
                         state,
                         playlistPath,
-                        GetCommandLineArguments(playlistPath, state, false, segmentId),
+                        GetCommandLineArguments(playlistPath, state, isEventPlaylist, segmentId),
                         Request.HttpContext.User.GetUserId(),
                         TranscodingJobType,
                         cancellationTokenSource).ConfigureAwait(false);

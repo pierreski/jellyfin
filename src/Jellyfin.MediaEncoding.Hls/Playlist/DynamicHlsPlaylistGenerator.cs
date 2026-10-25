@@ -35,15 +35,21 @@ public class DynamicHlsPlaylistGenerator : IDynamicHlsPlaylistGenerator
     {
         IReadOnlyList<double> segments;
         // For video transcodes it is sufficient with equal length segments as ffmpeg will create new keyframes
-        if (request.IsRemuxingVideo
+        if (!request.IsActiveRecording
+            && request.IsRemuxingVideo
             && request.MediaSourceId is not null
             && TryExtractKeyframes(request.MediaSourceId.Value, request.FilePath, out var keyframeData))
         {
             segments = ComputeSegments(keyframeData, request.DesiredSegmentLengthMs);
         }
-        else
+        else if (request.TotalRuntimeTicks > 0)
         {
             segments = ComputeEqualLengthSegments(request.DesiredSegmentLengthMs, request.TotalRuntimeTicks);
+        }
+        else
+        {
+            // An active recording can be queried before the first complete segment is available.
+            segments = Array.Empty<double>();
         }
 
         var segmentExtension = EncodingHelper.GetSegmentFileExtension(request.SegmentContainer);
@@ -52,10 +58,13 @@ public class DynamicHlsPlaylistGenerator : IDynamicHlsPlaylistGenerator
         var isHlsInFmp4 = string.Equals(segmentExtension, ".mp4", StringComparison.OrdinalIgnoreCase);
         var hlsVersion = isHlsInFmp4 ? "7" : "3";
 
+        var playlistType = request.IsEventPlaylist ? "EVENT" : "VOD";
+
         var builder = new StringBuilder(128);
 
         builder.AppendLine("#EXTM3U")
-            .AppendLine("#EXT-X-PLAYLIST-TYPE:VOD")
+            .Append("#EXT-X-PLAYLIST-TYPE:")
+            .AppendLine(playlistType)
             .Append("#EXT-X-VERSION:")
             .Append(hlsVersion)
             .AppendLine()
@@ -101,7 +110,10 @@ public class DynamicHlsPlaylistGenerator : IDynamicHlsPlaylistGenerator
             currentRuntimeInSeconds += lengthTicks;
         }
 
-        builder.AppendLine("#EXT-X-ENDLIST");
+        if (!request.IsActiveRecording)
+        {
+            builder.AppendLine("#EXT-X-ENDLIST");
+        }
 
         return builder.ToString();
     }

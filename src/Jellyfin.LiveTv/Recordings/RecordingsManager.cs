@@ -357,6 +357,9 @@ public sealed class RecordingsManager : IRecordingsManager, IDisposable
                 await _recordingsMetadataManager.SaveRecordingMetadata(timer, recordingPath, seriesPath).ConfigureAwait(false);
                 await CreateRecordingFolders().ConfigureAwait(false);
 
+                // Allow the library to discover the recording while it is still growing so it can be played back live.
+                // The monitor delays this refresh to avoid scanning while the recorder is opening the file.
+                _libraryMonitor.ReportFileSystemChangeComplete(recordingPath, true);
                 TriggerRefresh(recordingPath);
                 await EnforceKeepUpTo(timer, seriesPath).ConfigureAwait(false);
             }

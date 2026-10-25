@@ -980,17 +980,22 @@ namespace Emby.Server.Implementations.Library
 
         public async Task<IReadOnlyList<MediaSourceInfo>> GetRecordingStreamMediaSources(ActiveRecordingInfo info, CancellationToken cancellationToken)
         {
+            var scheduledDuration = info.Timer.EndDate.AddSeconds(info.Timer.PostPaddingSeconds) - info.Timer.StartDate.AddSeconds(-info.Timer.PrePaddingSeconds);
+            var scheduledTicks = scheduledDuration.Ticks > 0 ? scheduledDuration.Ticks : (long?)null;
+
             var stream = new MediaSourceInfo
             {
-                EncoderPath = _appHost.GetApiUrlForLocalAccess() + "/LiveTv/LiveRecordings/" + info.Id + "/stream",
-                EncoderProtocol = MediaProtocol.Http,
                 Path = info.Path,
                 Protocol = MediaProtocol.File,
                 Id = info.Id,
                 SupportsDirectPlay = false,
                 SupportsDirectStream = true,
                 SupportsTranscoding = true,
-                IsInfiniteStream = true,
+                IsInfiniteStream = false,
+                RunTimeTicks = scheduledTicks,
+                IsInProgressRecording = true,
+                RecordingStartDate = info.Timer.StartDate.AddSeconds(-info.Timer.PrePaddingSeconds),
+                RecordingEndDate = info.Timer.EndDate.AddSeconds(info.Timer.PostPaddingSeconds),
                 RequiresOpening = false,
                 RequiresClosing = false,
                 BufferMs = 0,
@@ -1000,6 +1005,17 @@ namespace Emby.Server.Implementations.Library
 
             await new LiveStreamHelper(_mediaEncoder, _logger, _appPaths)
                 .AddMediaInfoWithProbe(stream, false, false, cancellationToken).ConfigureAwait(false);
+
+            // The probe above sees only the bytes already written to the active file.
+            // Keep that duration separately before exposing the scheduled timeline as RunTimeTicks.
+            stream.LiveEdgeTicks = stream.RunTimeTicks;
+
+            if (scheduledTicks.HasValue)
+            {
+                stream.RunTimeTicks = scheduledTicks.Value;
+            }
+
+            stream.IsInfiniteStream = false;
 
             return [stream];
         }

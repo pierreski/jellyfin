@@ -1,6 +1,7 @@
 #nullable disable
 #pragma warning disable CS1591
 
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
@@ -54,6 +55,26 @@ namespace MediaBrowser.Model.Dto
         public string ETag { get; set; }
 
         public long? RunTimeTicks { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this source belongs to a recording that is still in progress.
+        /// </summary>
+        public bool IsInProgressRecording { get; set; }
+
+        /// <summary>
+        /// Gets or sets the duration currently available in an in-progress recording.
+        /// </summary>
+        public long? LiveEdgeTicks { get; set; }
+
+        /// <summary>
+        /// Gets or sets the scheduled start time for an in-progress recording, including pre-padding.
+        /// </summary>
+        public DateTime? RecordingStartDate { get; set; }
+
+        /// <summary>
+        /// Gets or sets the scheduled end time for an in-progress recording, including post-padding.
+        /// </summary>
+        public DateTime? RecordingEndDate { get; set; }
 
         public bool ReadAtNativeFramerate { get; set; }
 
